@@ -28,14 +28,34 @@
   .pick.active{border-color:var(--navy);background:var(--navy);color:#fff}
   .pick .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex-shrink:0}
   .pick .dot.done{background:var(--accent)}
+  .pick .dot.locked{background:var(--red)}
   .pick.active .dot.done{background:#7fe3bf}
+  .pick.active .dot.locked{background:#f5a89e}
 
-  .status{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;letter-spacing:.2px;white-space:nowrap;width:max-content;margin-bottom:14px}
+  .status{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;letter-spacing:.2px;white-space:nowrap;width:max-content;margin-bottom:10px}
   .status .bdot{width:7px;height:7px;border-radius:50%}
   .status.pending{background:var(--amber-l);color:var(--amber);border:1.5px solid #fcd9a8}
   .status.pending .bdot{background:var(--amber)}
   .status.done{background:var(--teal-l);color:var(--teal);border:1.5px solid #b7e4d6}
   .status.done .bdot{background:var(--teal)}
+  .status.locked{background:var(--red-l);color:var(--red);border:1.5px solid #f3c6c0}
+  .status.locked .bdot{background:var(--red)}
+
+  .attempt-note{font-size:11.5px;color:var(--text3);margin-bottom:16px}
+  .attempt-note b{color:var(--navy)}
+
+  /* Stats */
+  .stats-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-top:8px}
+  .stats-title{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:3px}
+  .stats-sub{font-size:11.5px;color:var(--text3);margin-bottom:14px}
+  .stats-table{width:100%;border-collapse:collapse}
+  .stats-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:700;padding:0 10px 8px 0;border-bottom:1.5px solid var(--border)}
+  .stats-table td{font-size:12.5px;padding:9px 10px 9px 0;border-bottom:1px solid var(--border);color:var(--text2)}
+  .stats-table tr:last-child td{border-bottom:none}
+  .stat-pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+  .stat-pill.ok{background:var(--teal-l);color:var(--teal)}
+  .stat-pill.no{background:var(--red-l);color:var(--red)}
+  .stat-pill.pending{background:var(--amber-l);color:var(--amber)}
 
   /* Case card */
   .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;margin-bottom:18px}
@@ -166,6 +186,7 @@
   <div class="status pending" id="statusBadge">
     <span class="bdot"></span><span id="statusText">Not Reviewed</span>
   </div>
+  <div class="attempt-note">Each case allows <b>2 attempts</b>. Attempts are tracked automatically and cannot be reset.</div>
 
   <div class="card" id="caseCard"></div>
 
@@ -175,13 +196,23 @@
     <div class="options" id="options"></div>
     <div class="actions">
       <button class="btn btn-prim" id="submitBtn" disabled>Submit</button>
-      <button class="btn btn-gh" id="resetBtn" style="display:none">Try Again</button>
     </div>
 
     <div class="feedback" id="feedback">
       <div class="fb-head" id="fbHead"></div>
       <div class="fb-body" id="fbBody"></div>
     </div>
+  </div>
+
+  <div class="stats-card">
+    <div class="stats-title">Your Attempt Summary</div>
+    <div class="stats-sub">Read-only record of attempts used per case</div>
+    <table class="stats-table">
+      <thead>
+        <tr><th>Case</th><th>Attempts Used</th><th>Result</th></tr>
+      </thead>
+      <tbody id="statsBody"></tbody>
+    </table>
   </div>
 
 </div>
@@ -208,6 +239,7 @@ loginForm.addEventListener('submit', (e) => {
     loginWrap.style.display = 'none';
     appWrap.classList.add('visible');
     whoami.textContent = 'Logged in as ' + u;
+    onLoginSuccess(u);
   } else {
     loginErr.classList.add('show');
   }
@@ -289,27 +321,61 @@ const OPTIONS = [
 
 let activeCase = 0;
 let selected = null;
-let submitted = false;
-const reviewed = new Set();
+let attemptState = {};
+let currentUser = null;
+
+const MAX_ATTEMPTS = 2;
 
 const picker = document.getElementById('picker');
 const caseCard = document.getElementById('caseCard');
 const optionsEl = document.getElementById('options');
 const submitBtn = document.getElementById('submitBtn');
-const resetBtn = document.getElementById('resetBtn');
 const feedback = document.getElementById('feedback');
 const fbHead = document.getElementById('fbHead');
 const fbBody = document.getElementById('fbBody');
 const statusBadge = document.getElementById('statusBadge');
 const statusText = document.getElementById('statusText');
+const statsBody = document.getElementById('statsBody');
+
+function storageKey(caseId) {
+  return `attempts_CLPH403_${currentUser}_case${caseId}`;
+}
+
+async function loadAttemptState() {
+  for (const c of CASES) {
+    try {
+      const res = await window.storage.get(storageKey(c.id));
+      attemptState[c.id] = res ? JSON.parse(res.value) : { attempts: 0, solved: false, lastSelected: null };
+    } catch (e) {
+      attemptState[c.id] = { attempts: 0, solved: false, lastSelected: null };
+    }
+  }
+}
+
+async function saveAttemptState(caseId) {
+  try {
+    await window.storage.set(storageKey(caseId), JSON.stringify(attemptState[caseId]));
+  } catch (e) {
+    console.error('Could not save attempt data', e);
+  }
+}
+
+function isLocked(c) {
+  const s = attemptState[c.id];
+  return s.solved || s.attempts >= MAX_ATTEMPTS;
+}
 
 function renderPicker() {
   picker.innerHTML = '';
   CASES.forEach((c, i) => {
+    const s = attemptState[c.id];
+    let dotClass = '';
+    if (s.solved) dotClass = 'done';
+    else if (s.attempts >= MAX_ATTEMPTS) dotClass = 'locked';
     const b = document.createElement('button');
     b.className = 'pick' + (i === activeCase ? ' active' : '');
     b.type = 'button';
-    b.innerHTML = `<span class="dot${reviewed.has(c.id) ? ' done' : ''}"></span>Case 0${c.id}`;
+    b.innerHTML = `<span class="dot${dotClass ? ' ' + dotClass : ''}"></span>Case 0${c.id}`;
     b.addEventListener('click', () => selectCase(i));
     picker.appendChild(b);
   });
@@ -318,15 +384,12 @@ function renderPicker() {
 function selectCase(i) {
   activeCase = i;
   selected = null;
-  submitted = false;
+  feedback.className = 'feedback';
   renderPicker();
   renderCase();
   renderOptions();
-  submitBtn.disabled = true;
-  submitBtn.style.display = 'inline-block';
-  resetBtn.style.display = 'none';
-  feedback.className = 'feedback';
   updateStatus();
+  updateActionButtons();
 }
 
 function renderCase() {
@@ -340,40 +403,46 @@ function renderCase() {
 
 function updateStatus() {
   const c = CASES[activeCase];
-  if (reviewed.has(c.id)) {
+  const s = attemptState[c.id];
+  if (s.solved) {
     statusBadge.className = 'status done';
-    statusText.textContent = 'Reviewed';
+    statusText.textContent = `Reviewed — Correct on Attempt ${s.attempts}`;
+  } else if (s.attempts >= MAX_ATTEMPTS) {
+    statusBadge.className = 'status locked';
+    statusText.textContent = 'Attempts Used — Answer Revealed';
   } else {
     statusBadge.className = 'status pending';
-    statusText.textContent = 'Not Reviewed';
+    statusText.textContent = s.attempts === 0 ? 'Not Reviewed' : `Attempt ${s.attempts} of ${MAX_ATTEMPTS} Used`;
   }
 }
 
 function renderOptions() {
   const c = CASES[activeCase];
+  const s = attemptState[c.id];
+  const locked = isLocked(c);
   optionsEl.innerHTML = '';
   OPTIONS.forEach(o => {
     const btn = document.createElement('button');
     btn.className = 'opt';
     btn.type = 'button';
-    if (selected === o.id && !submitted) btn.classList.add('selected');
+    if (selected === o.id && !locked) btn.classList.add('selected');
 
-    if (submitted) {
+    if (locked) {
       btn.classList.add('disabled');
       if (o.id === c.correct) btn.classList.add('correct');
-      else if (o.id === selected) btn.classList.add('incorrect');
+      else if (o.id === s.lastSelected) btn.classList.add('incorrect');
     }
 
     let mark = '';
-    if (submitted && o.id === c.correct) mark = '<span class="badge-mark ok">✓ Correct</span>';
-    else if (submitted && o.id === selected && o.id !== c.correct) mark = '<span class="badge-mark no">✗ Your pick</span>';
+    if (locked && o.id === c.correct) mark = '<span class="badge-mark ok">✓ Correct</span>';
+    else if (locked && o.id === s.lastSelected && o.id !== c.correct) mark = '<span class="badge-mark no">✗ Your pick</span>';
 
     btn.innerHTML = `${mark}<div class="opt-name">${o.name}</div><div class="opt-def">${o.def}</div>`;
 
-    if (!submitted) {
+    if (!locked) {
       btn.addEventListener('click', () => {
         selected = o.id;
-        submitBtn.disabled = false;
+        updateActionButtons();
         renderOptions();
       });
     }
@@ -381,40 +450,79 @@ function renderOptions() {
   });
 }
 
-submitBtn.addEventListener('click', () => {
-  if (!selected) return;
+function updateActionButtons() {
   const c = CASES[activeCase];
-  submitted = true;
-  renderOptions();
+  const locked = isLocked(c);
+  if (locked) {
+    submitBtn.style.display = 'none';
+  } else {
+    submitBtn.style.display = 'inline-block';
+    submitBtn.disabled = !selected;
+    submitBtn.textContent = attemptState[c.id].attempts === 0 ? 'Submit — Attempt 1 of 2' : 'Submit — Attempt 2 of 2';
+  }
+}
 
-  submitBtn.style.display = 'none';
-  resetBtn.style.display = 'inline-block';
-
+async function handleSubmit() {
+  const c = CASES[activeCase];
+  if (!selected || isLocked(c)) return;
+  const s = attemptState[c.id];
+  s.attempts += 1;
+  s.lastSelected = selected;
   const isCorrect = selected === c.correct;
-  const correctOpt = OPTIONS.find(o => o.id === c.correct);
-  feedback.className = 'feedback show ' + (isCorrect ? 'right' : 'wrong');
-  fbHead.textContent = isCorrect ? `Correct — ${correctOpt.name}` : `Not quite — the correct answer is ${correctOpt.name}`;
-  fbBody.innerHTML = c.explain;
+  if (isCorrect) s.solved = true;
+  await saveAttemptState(c.id);
 
-  reviewed.add(c.id);
+  const correctOpt = OPTIONS.find(o => o.id === c.correct);
+  const nowLocked = isLocked(c);
+
+  if (isCorrect) {
+    feedback.className = 'feedback show right';
+    fbHead.textContent = `Correct — ${correctOpt.name} (Attempt ${s.attempts})`;
+    fbBody.innerHTML = c.explain;
+  } else if (nowLocked) {
+    feedback.className = 'feedback show wrong';
+    fbHead.textContent = `Out of attempts — the correct answer is ${correctOpt.name}`;
+    fbBody.innerHTML = c.explain;
+  } else {
+    feedback.className = 'feedback show wrong';
+    fbHead.textContent = 'Not quite — 1 attempt remaining';
+    fbBody.innerHTML = 'Review the note again and try once more. The definitions above may help narrow it down.';
+    selected = null;
+  }
+
+  renderOptions();
   renderPicker();
   updateStatus();
-});
+  updateActionButtons();
+  renderStats();
+}
 
-resetBtn.addEventListener('click', () => {
-  selected = null;
-  submitted = false;
-  submitBtn.disabled = true;
-  submitBtn.style.display = 'inline-block';
-  resetBtn.style.display = 'none';
-  feedback.className = 'feedback';
+function renderStats() {
+  statsBody.innerHTML = '';
+  CASES.forEach(c => {
+    const s = attemptState[c.id];
+    let pill;
+    if (s.solved) pill = `<span class="stat-pill ok">Correct — Attempt ${s.attempts}</span>`;
+    else if (s.attempts >= MAX_ATTEMPTS) pill = `<span class="stat-pill no">Not Solved</span>`;
+    else pill = `<span class="stat-pill pending">Not Attempted</span>`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>Case 0${c.id}</td><td>${s.attempts} / ${MAX_ATTEMPTS}</td><td>${pill}</td>`;
+    statsBody.appendChild(tr);
+  });
+}
+
+submitBtn.addEventListener('click', handleSubmit);
+
+async function onLoginSuccess(username) {
+  currentUser = username;
+  await loadAttemptState();
+  renderPicker();
+  renderCase();
   renderOptions();
-});
-
-renderPicker();
-renderCase();
-renderOptions();
-updateStatus();
+  updateStatus();
+  updateActionButtons();
+  renderStats();
+}
 </script>
 </body>
 </html>
