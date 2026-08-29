@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Case Review — Care Approach Classification</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --navy:#0a2540;--navy2:#123a5e;--teal:#0e7c6b;--teal-l:#e1f5ee;
+    --accent:#1d9e75;--amber:#b45309;--amber-l:#fffbeb;
+    --red:#c0392b;--red-l:#fef2f2;
+    --surface:#f4f6f9;--card:#fff;--border:#dde3ec;
+    --text:#0a2540;--text2:#4a5568;--text3:#8a95a3;
+  }
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--surface);color:var(--text);min-height:100vh}
+  .wrap{max-width:780px;margin:0 auto;padding:28px 20px 60px}
+
+  /* Header */
+  .hdr{margin-bottom:18px}
+  .hdr-t{font-size:20px;font-weight:700;color:var(--navy)}
+  .hdr-s{font-size:12.5px;color:var(--text3);margin-top:3px}
+
+  /* Case picker */
+  .picker{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+  .pick{position:relative;display:flex;align-items:center;gap:7px;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--text2);background:#fff;border:1.5px solid var(--border);border-radius:20px;padding:8px 14px 8px 12px;cursor:pointer;transition:all .15s}
+  .pick:hover{border-color:#b8c8dc}
+  .pick.active{border-color:var(--navy);background:var(--navy);color:#fff}
+  .pick .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex-shrink:0}
+  .pick .dot.done{background:var(--accent)}
+  .pick.active .dot.done{background:#7fe3bf}
+
+  .status{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;letter-spacing:.2px;white-space:nowrap;width:max-content;margin-bottom:14px}
+  .status .bdot{width:7px;height:7px;border-radius:50%}
+  .status.pending{background:var(--amber-l);color:var(--amber);border:1.5px solid #fcd9a8}
+  .status.pending .bdot{background:var(--amber)}
+  .status.done{background:var(--teal-l);color:var(--teal);border:1.5px solid #b7e4d6}
+  .status.done .bdot{background:var(--teal)}
+
+  /* Case card */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;margin-bottom:18px}
+  .case-tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--teal);background:var(--teal-l);padding:4px 10px;border-radius:6px;margin-bottom:12px}
+  .case-title{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:10px}
+  .case-body{font-size:14px;line-height:1.7;color:var(--text2)}
+  .case-body p{margin-bottom:10px}
+  .case-body p:last-child{margin-bottom:0}
+  .case-body strong{color:var(--navy)}
+
+  /* Question */
+  .q-label{font-size:13.5px;font-weight:600;color:var(--navy);margin:6px 0 14px}
+
+  .options{display:grid;gap:10px;margin-bottom:18px}
+  .opt{position:relative;display:block;text-align:left;width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:11px;padding:14px 16px;cursor:pointer;font-family:inherit;transition:border-color .15s, background .15s}
+  .opt:hover{border-color:#b8c8dc}
+  .opt.selected{border-color:var(--navy);background:#f7f9fc}
+  .opt-name{font-size:13.5px;font-weight:700;color:var(--navy);margin-bottom:3px}
+  .opt-def{font-size:12px;color:var(--text3);line-height:1.5}
+
+  .opt.correct{border-color:var(--accent);background:var(--teal-l)}
+  .opt.correct .opt-name{color:var(--teal)}
+  .opt.incorrect{border-color:var(--red);background:var(--red-l)}
+  .opt.incorrect .opt-name{color:var(--red)}
+  .opt.disabled{cursor:default}
+  .badge-mark{position:absolute;top:12px;right:14px;font-size:11px;font-weight:700}
+  .badge-mark.ok{color:var(--teal)}
+  .badge-mark.no{color:var(--red)}
+
+  .actions{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:9px;padding:11px 20px;cursor:pointer;border:none;transition:background .15s}
+  .btn-prim{background:var(--navy);color:#fff}
+  .btn-prim:hover{background:var(--navy2)}
+  .btn-prim:disabled{background:#c3cdd9;cursor:not-allowed}
+  .btn-gh{background:none;border:1.5px solid var(--border);color:var(--text2)}
+  .btn-gh:hover{border-color:var(--accent);color:var(--teal)}
+
+  /* Feedback */
+  .feedback{display:none;margin-top:18px;border-radius:12px;padding:18px 20px;border:1.5px solid}
+  .feedback.show{display:block}
+  .feedback.right{background:var(--teal-l);border-color:#b7e4d6}
+  .feedback.wrong{background:var(--red-l);border-color:#f3c6c0}
+  .fb-head{font-size:13.5px;font-weight:700;margin-bottom:6px}
+  .feedback.right .fb-head{color:var(--teal)}
+  .feedback.wrong .fb-head{color:var(--red)}
+  .fb-body{font-size:13px;line-height:1.65;color:var(--text2)}
+  .fb-body b{color:var(--navy)}
+
+  @media(max-width:480px){
+    .wrap{padding:20px 14px 50px}
+    .card{padding:18px}
+  }
+
+  /* Login */
+  .login-wrap{min-height:100vh;background:linear-gradient(160deg,var(--navy) 0%,var(--navy2) 100%);display:flex;align-items:center;justify-content:center;padding:20px}
+  .login-box{background:#fff;border-radius:18px;padding:38px 34px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+  .login-logo{width:56px;height:56px;background:var(--navy);border-radius:14px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px}
+  .login-t{font-size:19px;font-weight:700;text-align:center;color:var(--navy);margin-bottom:4px}
+  .login-s{font-size:12px;color:var(--text3);text-align:center;margin-bottom:24px;line-height:1.5}
+  .fg{margin-bottom:14px}
+  .fg label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+  .fg input{width:100%;border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;font-size:14px;color:var(--text);background:#fff;font-family:inherit;transition:border-color .15s}
+  .fg input:focus{outline:none;border-color:var(--accent)}
+  .login-err{background:var(--red-l);border:1.5px solid #f3c6c0;color:var(--red);border-radius:8px;padding:9px 13px;font-size:12.5px;margin-bottom:14px;display:none}
+  .login-err.show{display:block}
+  .btn-login{width:100%;background:var(--navy);color:#fff;border:none;border-radius:9px;padding:12px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;margin-top:4px}
+  .btn-login:hover{background:var(--navy2)}
+  .cred-box{background:var(--surface);border:1.5px dashed var(--border);border-radius:10px;padding:14px 16px;margin-top:20px}
+  .cred-title{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+  .cred-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:12.5px}
+  .cred-label{color:var(--text3)}
+  .cred-val{font-family:monospace;font-size:12.5px;font-weight:700;color:var(--navy);background:#fff;border:1px solid var(--border);border-radius:5px;padding:2px 9px}
+
+  .app-wrap{display:none}
+  .app-wrap.visible{display:block}
+  .top-user{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:6px}
+  .top-user span{font-size:12px;color:var(--text3)}
+  .course-badge{font-size:11px;font-weight:700;color:var(--teal);background:var(--teal-l);border:1px solid #b7e4d6;padding:4px 11px;border-radius:20px;letter-spacing:.3px;margin-right:auto}
+  .btn-lo{font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;font-family:inherit;text-decoration:underline}
+  .btn-lo:hover{color:var(--navy)}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginWrap">
+  <div class="login-box">
+    <div class="login-logo">Rx</div>
+    <div class="login-t">Student EMR Access — CLPH 403</div>
+    <div class="login-s">Mock electronic medical record login<br>for case review practice</div>
+
+    <div class="login-err" id="loginErr">Incorrect username or password.</div>
+
+    <form id="loginForm">
+      <div class="fg">
+        <label>Username</label>
+        <input type="text" id="uname" autocomplete="username" placeholder="Enter username">
+      </div>
+      <div class="fg">
+        <label>Password</label>
+        <input type="password" id="pword" autocomplete="current-password" placeholder="Enter password">
+      </div>
+      <button type="submit" class="btn-login">Log In</button>
+    </form>
+
+    <div class="cred-box">
+      <div class="cred-title">Demo Credentials</div>
+      <div class="cred-row"><span class="cred-label">Username</span><span class="cred-val">student</span></div>
+      <div class="cred-row"><span class="cred-label">Password</span><span class="cred-val">Pharm2026</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="app-wrap" id="appWrap">
+<div class="wrap">
+
+  <div class="top-user">
+    <span class="course-badge">CLPH 403</span>
+    <span id="whoami"></span>
+    <button class="btn-lo" id="logoutBtn">Log out</button>
+  </div>
+
+  <div class="hdr">
+    <div class="hdr-t">Case Review Exercise</div>
+    <div class="hdr-s">Identify the care approach reflected in each pharmacist's note</div>
+  </div>
+
+  <div class="picker" id="picker"></div>
+  <div class="status pending" id="statusBadge">
+    <span class="bdot"></span><span id="statusText">Not Reviewed</span>
+  </div>
+
+  <div class="card" id="caseCard"></div>
+
+
+  <div class="card">
+    <div class="q-label">How would you classify this pharmacist's approach?</div>
+    <div class="options" id="options"></div>
+    <div class="actions">
+      <button class="btn btn-prim" id="submitBtn" disabled>Submit</button>
+      <button class="btn btn-gh" id="resetBtn" style="display:none">Try Again</button>
+    </div>
+
+    <div class="feedback" id="feedback">
+      <div class="fb-head" id="fbHead"></div>
+      <div class="fb-body" id="fbBody"></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const CREDENTIALS = { username: "student", password: "Pharm2026" };
+
+const loginWrap = document.getElementById('loginWrap');
+const appWrap = document.getElementById('appWrap');
+const loginForm = document.getElementById('loginForm');
+const loginErr = document.getElementById('loginErr');
+const unameInput = document.getElementById('uname');
+const pwordInput = document.getElementById('pword');
+const whoami = document.getElementById('whoami');
+const logoutBtn = document.getElementById('logoutBtn');
+
+loginForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const u = unameInput.value.trim();
+  const p = pwordInput.value;
+  if (u === CREDENTIALS.username && p === CREDENTIALS.password) {
+    loginErr.classList.remove('show');
+    loginWrap.style.display = 'none';
+    appWrap.classList.add('visible');
+    whoami.textContent = 'Logged in as ' + u;
+  } else {
+    loginErr.classList.add('show');
+  }
+});
+
+logoutBtn.addEventListener('click', () => {
+  appWrap.classList.remove('visible');
+  loginWrap.style.display = 'flex';
+  unameInput.value = '';
+  pwordInput.value = '';
+  loginErr.classList.remove('show');
+});
+
+const CASES = [
+  {
+    id: 1,
+    tag: "Case 01 · Ambulatory Care",
+    title: "Patient R.K., 74 — Follow-up for Type 2 Diabetes & Hypertension",
+    body: `
+      <p><strong>Background:</strong> R.K. has T2DM, hypertension, and osteoarthritis, managed with metformin, amlodipine, and PRN diclofenac. Labs and blood pressure are at goal.</p>
+      <p><strong>Pharmacist's note:</strong> "Reviewed the patient's daily routine and asked what matters most to her right now. She reports her knee pain limits walking to the mosque, which she values highly, and she is hesitant about adding another pill. We discussed non-pharmacologic options for her knee pain and agreed to trial topical diclofenac instead of the oral PRN dose, revisiting in 4 weeks based on how it affects her mobility and comfort."</p>
+    `,
+    correct: "pcc",
+    explain: `The note shows the pharmacist asking what matters to <b>the patient</b> (mobility to the mosque), weighing her stated preference against adding medication, and reaching the plan together rather than dictating it. That shared, values-driven decision-making is the hallmark of <b>patient-centered care</b> — distinct from simply reviewing labs and comorbidities (patient-focused) or checking the drug itself for appropriateness (medication-focused).`
+  },
+  {
+    id: 2,
+    tag: "Case 02 · Community Pharmacy",
+    title: "Patient T.S., 58 — Refill Request for Atorvastatin 40 mg",
+    body: `
+      <p><strong>Background:</strong> T.S. presents a refill request for a maintenance statin. No new complaints reported at the counter.</p>
+      <p><strong>Pharmacist's note:</strong> "Verified the prescription: correct prescriber details, valid date, strength and quantity match the label instructions, refills remaining as authorized, no missing signature or formatting issues. Refill dispensed as written."</p>
+    `,
+    correct: "rx",
+    explain: `The note stops at verifying the order itself — prescriber details, dates, strength, quantity, and authorization. There's no assessment of the drug's appropriateness for the patient, no interaction or labs review, and no discussion of the patient's goals or concerns. That narrow focus on the written order's completeness and legality is <b>prescription-focused</b> care.`
+  },
+  {
+    id: 3,
+    tag: "Case 03 · Inpatient",
+    title: "Patient N.A., 66 — Post-operative VTE Prophylaxis",
+    body: `
+      <p><strong>Background:</strong> N.A. has CKD stage 3 (CrCl 38 mL/min) and was started on enoxaparin post-operatively.</p>
+      <p><strong>Pharmacist's note:</strong> "Reviewed renal function and adjusted enoxaparin dosing to 1 mg/kg every 24 hours per renal dosing guidelines. Cross-checked the medication list for interacting anticoagulants or antiplatelets — none identified. Dose adjustment communicated to the surgical team."</p>
+    `,
+    correct: "med",
+    explain: `The pharmacist's reasoning is entirely pharmacologic: renal-adjusted dosing and an interaction check on the drug itself. There's no mention of the patient's clinical picture beyond the lab value driving the dose, and no discussion with N.A. about preferences or goals. This narrow, drug-centered lens is <b>medication-focused</b> care.`
+  },
+  {
+    id: 4,
+    tag: "Case 04 · Anticoagulation Clinic",
+    title: "Patient H.M., 70 — New Diagnosis of Atrial Fibrillation",
+    body: `
+      <p><strong>Background:</strong> H.M. was newly diagnosed with atrial fibrillation and referred for anticoagulation initiation.</p>
+      <p><strong>Pharmacist's note:</strong> "Reviewed the full chart: renal function normal, no bleeding history, weight and age appropriate for standard-dose apixaban. Checked current medication list for interacting agents — none found. Counseled on bleeding precautions and missed-dose instructions."</p>
+    `,
+    correct: "pat",
+    explain: `The pharmacist pulls together H.M.'s broader clinical picture — renal function, bleeding history, weight, age, drug list — before selecting a dose, which goes beyond checking the drug alone. But the plan is still worked out and delivered by the clinician, with no mention of asking H.M. about his own preferences or goals for therapy. That's <b>patient-focused</b> care: patient context is considered, but decision-making stays clinician-directed.`
+  },
+  {
+    id: 5,
+    tag: "Case 05 · Heart Failure Clinic",
+    title: "Patient J.L., 63 — Heart Failure with Reduced Ejection Fraction",
+    body: `
+      <p><strong>Background:</strong> J.L. was diagnosed with HFrEF (EF 30%) eight months ago and remains on furosemide and a low-dose ACE inhibitor only, with ongoing NYHA class II–III symptoms.</p>
+      <p><strong>Pharmacist's note:</strong> "Comprehensive medication therapy review completed. Identified drug therapy problems: guideline-directed therapy is incomplete — no beta-blocker, MRA, or SGLT2 inhibitor on board despite no contraindications. Initiated carvedilol and titration plan, added spironolactone with a plan to recheck potassium and renal function in 1 week, and added dapagliflozin. Set target outcomes with the patient: reduce exertional symptoms to NYHA class I–II and avoid hospital readmission over the next 3 months. Follow-up scheduled at 2 and 6 weeks to monitor labs, titrate doses toward target, and reassess symptom burden against the stated goals."</p>
+    `,
+    correct: "phc",
+    explain: `This note goes beyond reviewing or adjusting a single drug — the pharmacist systematically <b>identifies drug therapy problems</b> (missing guideline-directed therapy), <b>resolves</b> them with a titration plan, and builds in monitoring to <b>prevent</b> new problems (potassium, renal function). Specific, measurable outcome goals are set with the patient and tracked over time. This structured process of maximizing therapeutic outcomes and minimizing risk across the whole regimen is the defining feature of <b>pharmaceutical care</b>.`
+  }
+];
+
+const OPTIONS = [
+  { id: "rx",  name: "Prescription-Focused", def: "Centers on the legality, completeness, and technical accuracy of the written order itself." },
+  { id: "med", name: "Medication-Focused",   def: "Centers on the drug — interactions, dosing, appropriateness — independent of the person taking it." },
+  { id: "pat", name: "Patient-Focused",      def: "Incorporates the patient's clinical picture (labs, comorbidities, history) but decisions still stay clinician-directed." },
+  { id: "pcc", name: "Patient-Centered Care", def: "Incorporates the patient's own values, goals, and preferences, with shared decision-making about the plan." },
+  { id: "phc", name: "Pharmaceutical Care", def: "Systematic process of identifying, resolving, and preventing drug therapy problems to maximize therapeutic outcomes toward specific, monitored goals." }
+];
+
+let activeCase = 0;
+let selected = null;
+let submitted = false;
+const reviewed = new Set();
+
+const picker = document.getElementById('picker');
+const caseCard = document.getElementById('caseCard');
+const optionsEl = document.getElementById('options');
+const submitBtn = document.getElementById('submitBtn');
+const resetBtn = document.getElementById('resetBtn');
+const feedback = document.getElementById('feedback');
+const fbHead = document.getElementById('fbHead');
+const fbBody = document.getElementById('fbBody');
+const statusBadge = document.getElementById('statusBadge');
+const statusText = document.getElementById('statusText');
+
+function renderPicker() {
+  picker.innerHTML = '';
+  CASES.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'pick' + (i === activeCase ? ' active' : '');
+    b.type = 'button';
+    b.innerHTML = `<span class="dot${reviewed.has(c.id) ? ' done' : ''}"></span>Case 0${c.id}`;
+    b.addEventListener('click', () => selectCase(i));
+    picker.appendChild(b);
+  });
+}
+
+function selectCase(i) {
+  activeCase = i;
+  selected = null;
+  submitted = false;
+  renderPicker();
+  renderCase();
+  renderOptions();
+  submitBtn.disabled = true;
+  submitBtn.style.display = 'inline-block';
+  resetBtn.style.display = 'none';
+  feedback.className = 'feedback';
+  updateStatus();
+}
+
+function renderCase() {
+  const c = CASES[activeCase];
+  caseCard.innerHTML = `
+    <span class="case-tag">${c.tag}</span>
+    <div class="case-title">${c.title}</div>
+    <div class="case-body">${c.body}</div>
+  `;
+}
+
+function updateStatus() {
+  const c = CASES[activeCase];
+  if (reviewed.has(c.id)) {
+    statusBadge.className = 'status done';
+    statusText.textContent = 'Reviewed';
+  } else {
+    statusBadge.className = 'status pending';
+    statusText.textContent = 'Not Reviewed';
+  }
+}
+
+function renderOptions() {
+  const c = CASES[activeCase];
+  optionsEl.innerHTML = '';
+  OPTIONS.forEach(o => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.type = 'button';
+    if (selected === o.id && !submitted) btn.classList.add('selected');
+
+    if (submitted) {
+      btn.classList.add('disabled');
+      if (o.id === c.correct) btn.classList.add('correct');
+      else if (o.id === selected) btn.classList.add('incorrect');
+    }
+
+    let mark = '';
+    if (submitted && o.id === c.correct) mark = '<span class="badge-mark ok">✓ Correct</span>';
+    else if (submitted && o.id === selected && o.id !== c.correct) mark = '<span class="badge-mark no">✗ Your pick</span>';
+
+    btn.innerHTML = `${mark}<div class="opt-name">${o.name}</div><div class="opt-def">${o.def}</div>`;
+
+    if (!submitted) {
+      btn.addEventListener('click', () => {
+        selected = o.id;
+        submitBtn.disabled = false;
+        renderOptions();
+      });
+    }
+    optionsEl.appendChild(btn);
+  });
+}
+
+submitBtn.addEventListener('click', () => {
+  if (!selected) return;
+  const c = CASES[activeCase];
+  submitted = true;
+  renderOptions();
+
+  submitBtn.style.display = 'none';
+  resetBtn.style.display = 'inline-block';
+
+  const isCorrect = selected === c.correct;
+  const correctOpt = OPTIONS.find(o => o.id === c.correct);
+  feedback.className = 'feedback show ' + (isCorrect ? 'right' : 'wrong');
+  fbHead.textContent = isCorrect ? `Correct — ${correctOpt.name}` : `Not quite — the correct answer is ${correctOpt.name}`;
+  fbBody.innerHTML = c.explain;
+
+  reviewed.add(c.id);
+  renderPicker();
+  updateStatus();
+});
+
+resetBtn.addEventListener('click', () => {
+  selected = null;
+  submitted = false;
+  submitBtn.disabled = true;
+  submitBtn.style.display = 'inline-block';
+  resetBtn.style.display = 'none';
+  feedback.className = 'feedback';
+  renderOptions();
+});
+
+renderPicker();
+renderCase();
+renderOptions();
+updateStatus();
+</script>
+</body>
+</html>
